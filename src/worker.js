@@ -18,7 +18,11 @@ async function ical(url, env) {
 
   const name = "ICAL_" + key.toUpperCase();
   const src = (env[name] || "").trim();
-  if (!src) return text(`${name} isn't set. Add it under Settings > Variables and Secrets as a Secret.`, 404);
+  if (!src) {
+    const seen = Object.keys(env).filter(k => k !== "ASSETS");
+    return text(`${name} isn't set. Add it under the Worker's Settings > Variables and Secrets (not Build variables) as a Secret.\n`
+      + `Names this Worker can see: ${seen.length ? seen.join(", ") : "(none)"}`, 404);
+  }
 
   const target = src.replace(/^webcal:/i, "https:");
   let upstream;
