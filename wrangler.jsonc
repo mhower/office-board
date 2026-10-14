@@ -1,0 +1,10 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "office-board",
+  "main": "src/worker.js",
+  "compatibility_date": "2025-09-01",
+  "assets": { "directory": "./public", "binding": "ASSETS" },
+  // Keep variables set in the dashboard when Git pushes redeploy.
+  "keep_vars": true,
+  "observability": { "enabled": true }
+}

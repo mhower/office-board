@@ -1,18 +1,24 @@
-// Cloudflare Pages Function: GET /ical?cal=<key>
-// Fetches a private iCal feed server-side so the browser never sees the secret URL
-// and doesn't hit CORS. Set one Secret per calendar in Pages > Settings > Variables and Secrets
-// (Production environment): ICAL_WORK, etc. Keys match CONFIG.calendars in index.html.
-// Add &debug=1 to see what the upstream calendar server returned.
+// Office Board Worker
+// - /ical?cal=<key>  fetches a private iCal feed server-side (secret ICAL_<KEY>), so the
+//   browser never sees the link and there are no CORS problems. Add &debug=1 to inspect.
+// - everything else is served from ./public (the board itself).
 
-export async function onRequestGet({ request, env }) {
-  const url = new URL(request.url);
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    if (url.pathname === "/ical") return ical(url, env);
+    return env.ASSETS.fetch(request);
+  },
+};
+
+async function ical(url, env) {
   const key = url.searchParams.get("cal") || "";
   const debug = url.searchParams.has("debug");
   if (!/^[a-z0-9_]+$/i.test(key)) return text("Bad calendar key", 400);
 
   const name = "ICAL_" + key.toUpperCase();
   const src = (env[name] || "").trim();
-  if (!src) return text(`${name} isn't set for this deployment. Add it as a Production secret, then redeploy.`, 404);
+  if (!src) return text(`${name} isn't set. Add it under Settings > Variables and Secrets as a Secret.`, 404);
 
   const target = src.replace(/^webcal:/i, "https:");
   let upstream;
@@ -20,7 +26,7 @@ export async function onRequestGet({ request, env }) {
     upstream = await fetch(target, {
       redirect: "follow",
       headers: {
-        "User-Agent": "Mozilla/5.0 (OfficeBoard; Cloudflare Pages)",
+        "User-Agent": "Mozilla/5.0 (OfficeBoard; Cloudflare Workers)",
         "Accept": "text/calendar, text/plain, */*",
       },
       cf: { cacheTtl: 120, cacheEverything: true },
@@ -34,7 +40,6 @@ export async function onRequestGet({ request, env }) {
     return new Response(JSON.stringify({
       secret: name,
       host: new URL(target).host,
-      path_ends_with: new URL(target).pathname.slice(-12),
       upstream_status: upstream.status,
       upstream_type: upstream.headers.get("content-type"),
       final_url_host: new URL(upstream.url).host,
@@ -52,4 +57,5 @@ export async function onRequestGet({ request, env }) {
   });
 }
 
-const text = (msg, status) => new Response(msg, { status, headers: { "content-type": "text/plain", "cache-control": "no-store" } });
+const text = (msg, status) =>
+  new Response(msg, { status, headers: { "content-type": "text/plain", "cache-control": "no-store" } });
