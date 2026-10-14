@@ -1,12 +1,14 @@
 // Office Board Worker
 // - /ical?cal=<key>  fetches a private iCal feed server-side (secret ICAL_<KEY>), so the
 //   browser never sees the link and there are no CORS problems. Add &debug=1 to inspect.
+// - /games  CU women's basketball schedule, results and record from ESPN's public feed.
 // - everything else is served from ./public (the board itself).
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === "/ical") return ical(url, env);
+    if (url.pathname === "/games") return games(url);
     return env.ASSETS.fetch(request);
   },
 };
@@ -63,3 +65,80 @@ async function ical(url, env) {
 
 const text = (msg, status) =>
   new Response(msg, { status, headers: { "content-type": "text/plain", "cache-control": "no-store" } });
+
+/* ---------- CU WBB schedule + record (ESPN public feed) ---------- */
+const ESPN_TEAM = "38"; // Colorado Buffaloes, women's college basketball
+const ESPN = `https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/teams/${ESPN_TEAM}/schedule`;
+
+async function games(url) {
+  const season = url.searchParams.get("season");
+  const q = season ? `&season=${encodeURIComponent(season)}` : "";
+  try {
+    const [reg, post] = await Promise.all([2, 3].map(async st => {
+      const r = await fetch(`${ESPN}?seasontype=${st}${q}`, { cf: { cacheTtl: 120, cacheEverything: true } });
+      if (!r.ok) { if (st === 2) throw new Error(`ESPN returned ${r.status}`); return null; }
+      return r.json();
+    }));
+    const body = shapeSchedule(reg, post);
+    return new Response(JSON.stringify(body), { headers: { "content-type": "application/json", "cache-control": "no-store" } });
+  } catch (e) {
+    return text(`Couldn't load the schedule (${e.message})`, 502);
+  }
+}
+
+function shapeSchedule(reg, post) {
+  const seen = new Set();
+  const evs = [...(reg?.events || []), ...(post?.events || [])].filter(e => !seen.has(e.id) && seen.add(e.id));
+  const num = s => s == null ? null : typeof s === "object" ? (s.displayValue ?? s.value ?? null) : s;
+  const rank = c => { const r = c?.curatedRank?.current; return r && r <= 25 ? r : null; };
+  const rec = (c, type) => (c?.record || []).find(r => r.type === type)?.displayValue || null;
+
+  const events = evs.map(ev => {
+    const c = ev.competitions?.[0] || {};
+    const cu = (c.competitors || []).find(x => x.team?.id === ESPN_TEAM || x.id === ESPN_TEAM) || {};
+    const op = (c.competitors || []).find(x => x !== cu) || {};
+    const st = c.status?.type || ev.status?.type || {};
+    return {
+      date: ev.date,
+      timeValid: c.timeValid ?? ev.timeValid ?? true,
+      home: cu.homeAway === "home",
+      neutral: !!c.neutralSite,
+      opp: op.team?.shortDisplayName || op.team?.displayName || "TBD",
+      oppAbbr: op.team?.abbreviation || "",
+      oppRank: rank(op),
+      cuRank: rank(cu),
+      venue: c.venue?.fullName || "",
+      city: [c.venue?.address?.city, c.venue?.address?.state].filter(Boolean).join(", "),
+      tv: (c.broadcasts || []).map(b => b.media?.shortName || b.names?.[0]).filter(Boolean),
+      state: st.state || "pre",
+      detail: st.shortDetail || "",
+      cuScore: num(cu.score),
+      oppScore: num(op.score),
+      win: st.state === "post" ? cu.winner === true : null,
+      overall: rec(cu, "total"),
+      conf: rec(cu, "vsconf"),
+    };
+  }).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  const done = events.filter(e => e.state === "post" && e.cuScore != null);
+  const last = done[done.length - 1];
+  let streak = null;
+  if (last) {
+    let n = 0;
+    for (let i = done.length - 1; i >= 0 && done[i].win === last.win; i--) n++;
+    streak = `${last.win ? "W" : "L"}${n}`;
+  }
+  const wins = done.filter(e => e.win).length;
+  return {
+    season: reg?.season?.displayName || null,
+    events,
+    record: {
+      overall: last?.overall || `${wins}-${done.length - wins}`,
+      conf: last?.conf || null,
+      streak,
+      played: done.length,
+    },
+    standing: reg?.team?.standingSummary || null,
+    updated: new Date().toISOString(),
+  };
+}
