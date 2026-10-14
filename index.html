@@ -323,20 +323,22 @@ function parseICS(text, cal, ws, we) {
 async function loadCalendars() {
   const now = new Date(), ws = sod(now), we = addDays(ws, CONFIG.daysAhead + 1);
   const results = await Promise.allSettled(CONFIG.calendars.map(async c => {
-    if (typeof ICAL === "undefined") throw new Error("parser");
-    const r = await fetch(`/ical?cal=${encodeURIComponent(c.key)}`, { cache: "no-store" });
-    if (!r.ok) throw new Error(r.status);
+    if (typeof ICAL === "undefined") throw new Error("calendar parser didn't load");
+    let r;
+    try { r = await fetch(`/ical?cal=${encodeURIComponent(c.key)}`, { cache: "no-store" }); }
+    catch (e) { throw new Error("can't reach /ical"); }
     const t = await r.text();
-    if (!t.includes("BEGIN:VCALENDAR")) throw new Error("not ics");
+    if (!r.ok) throw new Error(`${r.status}: ${t.slice(0, 140)}`);
+    if (!t.includes("BEGIN:VCALENDAR")) throw new Error(/<html/i.test(t) ? "got a web page instead of a calendar (sign-in page or wrong link)" : "response isn't a calendar file");
     return parseICS(t, c, ws, we);
   }));
   const ok = results.filter(r => r.status === "fulfilled");
-  const failed = CONFIG.calendars.filter((c, i) => results[i].status === "rejected").map(c => c.label);
+  const failed = CONFIG.calendars.map((c, i) => results[i].status === "rejected" ? `${c.label}: ${results[i].reason?.message || results[i].reason}` : null).filter(Boolean);
   if (ok.length) {
     events = ok.flatMap(r => r.value).sort((a, b) => a.start - b.start || a.end - b.end);
     calStatus = { mode: "live", failed }; lastCal = new Date();
   } else if (calStatus.mode !== "live") {
-    events = sampleEvents(); calStatus = { mode: "sample", failed: [] };
+    events = sampleEvents(); calStatus = { mode: "sample", failed };
   } else {
     calStatus = { mode: "live", failed }; // keep last good events
   }
@@ -410,9 +412,9 @@ function render() {
   $("ahead").innerHTML = a;
 
   // Footer
-  const status = calStatus.mode === "sample" ? `<span class="warn">Sample calendar · connect your feed to go live</span>`
+  const status = calStatus.mode === "sample" ? `<span class="warn">Sample calendar · ${calStatus.failed.length ? esc(calStatus.failed.join(" | ")) : "connect your feed to go live"}</span>`
     : calStatus.mode === "loading" ? "Loading calendar…"
-    : `Calendar synced ${lastCal ? fmtTime(lastCal) : ""}${calStatus.failed.length ? ` · <span class="warn">${esc(calStatus.failed.join(", "))} not loading</span>` : ""}`;
+    : `Calendar synced ${lastCal ? fmtTime(lastCal) : ""}${calStatus.failed.length ? ` · <span class="warn">${esc(calStatus.failed.join(" | "))}</span>` : ""}`;
   const legend = showDots() ? `<div class="legend">${CONFIG.calendars.map(c => `<span><i class="dot" style="background:${c.color}"></i>${esc(c.label)}</span>`).join("")}</div>` : "";
   $("foot").innerHTML = `${legend}<div>${status}</div>`;
 }
