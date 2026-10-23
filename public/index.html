@@ -135,6 +135,8 @@ body {
 .day-h:first-of-type { margin-top: 0; }
 .day-h span { color: var(--gold); font-size: .8em; margin-left: .3em; }
 .empty { color: var(--muted); padding-block: .6vw; }
+#today { -webkit-mask-image: none; mask-image: none; }
+.list h3 .hid { color: var(--muted); letter-spacing: .08em; }
 .more { color: var(--muted); font-size: .9em; padding-block: .3vw; }
 
 /* Footer */
@@ -197,6 +199,10 @@ const CONFIG = {
     { key: "work", label: "CU WBB", color: "#cfb87c" },
   ],
   daysAhead: 4,              // days shown in "Coming up"
+  // Events whose title matches one of these are left off the board (counted as hidden under Today).
+  hide: [
+    { label: "PT", match: /\bPT\b/i },          // "A. Foy - PT Appt - Champs"
+  ],
   nightDim: { from: 21, to: 6 },  // dim the board between these hours
   calendarRefreshMin: 5,
   weatherRefreshMin: 15,
@@ -226,7 +232,8 @@ const calOf = key => CONFIG.calendars.find(c => c.key === key) || { color: "#cfb
 const showDots = () => CONFIG.calendars.length > 1;
 
 /* ---------- state ---------- */
-let events = [];
+let events = [], hiddenEvents = [];
+const isHidden = e => CONFIG.hide.some(h => h.match.test(e.title));
 let calStatus = { mode: "loading", failed: [] };
 let weather = null, wxSample = false, lastCal = null;
 
@@ -417,10 +424,12 @@ async function loadCalendars() {
   const ok = results.filter(r => r.status === "fulfilled");
   const failed = CONFIG.calendars.map((c, i) => results[i].status === "rejected" ? `${c.label}: ${results[i].reason?.message || results[i].reason}` : null).filter(Boolean);
   if (ok.length) {
-    events = ok.flatMap(r => r.value).sort((a, b) => a.start - b.start || a.end - b.end);
+    const all = ok.flatMap(r => r.value).sort((a, b) => a.start - b.start || a.end - b.end);
+    events = all.filter(e => !isHidden(e));
+    hiddenEvents = all.filter(isHidden);
     calStatus = { mode: "live", failed }; lastCal = new Date();
   } else if (calStatus.mode !== "live") {
-    events = sampleEvents(); calStatus = { mode: "sample", failed };
+    const all = sampleEvents(); events = all.filter(e => !isHidden(e)); hiddenEvents = all.filter(isHidden); calStatus = { mode: "sample", failed };
   } else {
     calStatus = { mode: "live", failed }; // keep last good events
   }
@@ -467,16 +476,15 @@ function render() {
   // Today
   const todayAll = events.filter(e => e.allDay && e.start <= now && e.end > now);
   const todayTimed = timed.filter(e => sameDay(e.start, now));
-  const doneCount = todayTimed.filter(e => e.end <= now).length;
-  const shown = todayTimed.filter(e => e.end > now);
-  const lastDone = todayTimed.filter(e => e.end <= now).slice(-1);
-  let t = `<h3 class="label">Today · ${todayTimed.length} event${todayTimed.length === 1 ? "" : "s"}</h3>`;
+  const hiddenToday = hiddenEvents.filter(e => sameDay(e.start, now) || (e.allDay && e.start <= now && e.end > now));
+  const hiddenNote = hiddenToday.length
+    ? ` <span class="hid">· ${CONFIG.hide.map(h => { const n = hiddenToday.filter(e => h.match.test(e.title)).length; return n ? `${n} ${h.label} hidden` : ""; }).filter(Boolean).join(", ")}</span>` : "";
+  let t = `<h3 class="label">Today · ${todayTimed.length} event${todayTimed.length === 1 ? "" : "s"}${hiddenNote}</h3>`;
   if (todayAll.length) t += `<div class="allday">${todayAll.map(chip).join("")}</div>`;
-  const rows = [...lastDone, ...shown];
-  t += rows.length ? rows.slice(0, 6).map(e => evRow(e, now)).join("") : `<div class="empty">Nothing else today.</div>`;
-  if (rows.length > 6) t += `<div class="more">+${rows.length - 6} more</div>`;
-  if (doneCount > lastDone.length) t += `<div class="more">${doneCount} done today</div>`;
-  $("today").innerHTML = t;
+  t += todayTimed.length ? todayTimed.map(e => evRow(e, now)).join("") : `<div class="empty">Nothing on the calendar today.</div>`;
+  const todayEl = $("today");
+  todayEl.innerHTML = t;
+  fitToColumn(todayEl);
 
   // Coming up
   let a = `<h3 class="label">Coming up</h3>`;
@@ -501,6 +509,17 @@ function render() {
   $("foot").innerHTML = `${legend}<div>${status}</div>`;
 }
 
+/* Shrink a list's text until every row fits its column (busy days). */
+function fitToColumn(el) {
+  el.style.fontSize = "";
+  if (window.matchMedia("(max-width: 900px)").matches) return;
+  let s = 1;
+  while (el.scrollHeight > el.clientHeight + 1 && s > 0.62) {
+    s -= 0.04;
+    el.style.fontSize = s + "em";
+  }
+}
+
 /* ---------- sample data (preview only; clearly flagged on screen) ---------- */
 function sampleEvents() {
   const now = new Date(), d0 = sod(now);
@@ -514,6 +533,11 @@ function sampleEvents() {
     mk("Opponent film prep", rel(0, -20), 60, "CUEC Film Room"),
     mk("WBB Practice", rel(1, 30), 120, "Arena/Lower"),
     mk("Lineup report review", rel(4, 0), 30),
+    mk("A. Foy - PT Appt - Champs", rel(2, 0), 30, "Champs Training Room"),
+    mk("Treatment", rel(-4, 0), 30, "Champs Training Room"),
+    mk("Chiropractor available", rel(-3, 0), 60, "Champs Training Room"),
+    mk("Recruiting calls", rel(3, 0), 60),
+    mk("Disney VP Speaking", rel(5, 0), 60, "Arapahoe Hall 2nd Floor Rm 240"),
     ad("WBB Off Day", 1),
     mk("Monthly Compliance Meeting", at(1, 10), 60, "CUEC Film Room"),
     mk("Scouting meeting", at(1, 13), 60),
