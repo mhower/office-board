@@ -59,7 +59,7 @@ body {
 .date b { color: var(--gold); font-weight: 500; }
 
 /* Weather */
-.wx { border-top: 1px solid var(--gold-dim); padding-top: 1.8vw; display: flex; flex-direction: column; gap: 1.6vw; }
+.wx { border-top: 1px solid var(--gold-dim); padding-top: 1.3vw; display: flex; flex-direction: column; gap: 1.1vw; }
 .wx-now { display: flex; align-items: center; gap: 1.6vw; }
 .wx-now svg { width: 5.4vw; height: 5.4vw; color: var(--gold); flex: none; }
 .wx-temp { font-family: var(--display); font-size: 6vw; line-height: .9; font-weight: 500; }
@@ -68,7 +68,7 @@ body {
 .wx-cond { font-family: var(--display); font-size: 1.9vw; }
 .wx-meta { color: var(--muted); font-size: 1em; }
 .forecast { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .6vw; }
-.fday { display: flex; flex-direction: column; align-items: center; gap: .45em; padding-block: .9vw; border-radius: 6px; border: 1px solid transparent; }
+.fday { display: flex; flex-direction: column; align-items: center; gap: .35em; padding-block: .6vw; border-radius: 6px; border: 1px solid transparent; }
 .fday.today { background: var(--gold-wash); border-color: var(--gold-dim); }
 .fday svg { width: 2.4vw; height: 2.4vw; color: var(--gold); }
 .fday .hi { font-family: var(--display); font-size: 1.6vw; }
@@ -84,19 +84,24 @@ body {
 }
 
 /* Next game + record */
-.game { border-top: 1px solid var(--gold-dim); padding-top: 1.5vw; display: flex; flex-direction: column; gap: .55vw; text-shadow: 0 0 10px var(--ground), 0 0 4px var(--ground); }
+.game { border-top: 1px solid var(--gold-dim); padding-top: 1.1vw; display: flex; flex-direction: column; gap: .45vw; text-shadow: 0 0 10px var(--ground), 0 0 4px var(--ground); }
 .game-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1em; }
 .game-when { font-family: var(--display); font-size: 1.7vw; color: var(--gold); font-weight: 600; }
 .game-when.live::before { content: ""; display: inline-block; width: .5em; height: .5em; border-radius: 50%; background: var(--gold); margin-right: .4em; vertical-align: .12em; animation: pulse 1.6s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .3; } }
-.game-opp { font-family: var(--display); font-size: 2.8vw; font-weight: 600; line-height: 1; overflow-wrap: anywhere; }
+.game-opp { font-family: var(--display); font-size: 2.4vw; font-weight: 600; line-height: 1; overflow-wrap: anywhere; }
 .game-opp .ha { color: var(--gold); font-weight: 500; font-size: .62em; margin-right: .3em; text-transform: uppercase; letter-spacing: .06em; }
 .game-opp .rk { color: var(--gold); font-size: .62em; font-weight: 500; margin-right: .15em; }
 .game-score { font-family: var(--display); font-size: 2.8vw; font-weight: 600; line-height: 1; }
 .game-score .w { color: var(--gold); }
 .game-sub { color: var(--muted); display: flex; flex-wrap: wrap; gap: .2em 1em; }
-.record { display: flex; flex-wrap: wrap; gap: .3em 1.6em; font-family: var(--display); font-size: 1.35vw; color: var(--muted); margin-top: .3vw; }
+.record { display: flex; flex-wrap: wrap; gap: .3em 1.4em; font-family: var(--display); font-size: 1.2vw; color: var(--muted); margin-top: .3vw; }
 .record b { color: var(--ink); font-weight: 600; margin-right: .3em; }
+.scouts { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3em .9em; font-family: var(--display); font-size: 1.15vw; color: var(--muted); margin-top: .5vw; }
+.scouts .k { color: var(--gold); font-weight: 600; text-transform: uppercase; letter-spacing: .12em; font-size: .8em; }
+.scouts .nx { color: var(--ink); font-weight: 600; }
+.scouts .nx em { font-style: normal; color: var(--gold); margin-left: .35em; }
+.scout-tag { display: inline-block; font-family: var(--display); font-size: .78em; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--ground); background: var(--gold); border-radius: 3px; padding: .05em .45em; margin-left: .6em; vertical-align: .15em; text-shadow: none; }
 .record .last b { color: var(--gold); margin: 0 0 0 .3em; }
 
 /* Up next */
@@ -199,6 +204,14 @@ const CONFIG = {
     { key: "work", label: "CU WBB", color: "#cfb87c" },
   ],
   daysAhead: 4,              // days shown in "Coming up"
+  // Matt's scouting assignments. Dates are game dates (local). Past ones drop off the board.
+  scouts: [
+    { date: "2026-11-18", team: "New Mexico", short: "UNM" },
+    { date: "2026-12-15", team: "Utah Tech", short: "Utah Tech" },
+    { date: "2026-12-30", team: "Arizona State", short: "ASU" },
+    { date: "2027-01-09", team: "UCF", short: "UCF", note: "took from JR" },
+    { date: "2027-01-24", team: "Kansas", short: "Kansas" },
+  ],
   // Events whose title matches one of these are left off the board (counted as hidden under Today).
   hide: [
     { label: "PT", match: /\bPT\b/i },          // "A. Foy - PT Appt - Champs"
@@ -337,6 +350,23 @@ function gameWhen(g) {
   const day = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
   return g.timeValid ? `${day} · ${fmtTime(d)}` : `${day} · Time TBD`;
 }
+const localKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const scoutFor = g => g && CONFIG.scouts.find(s => s.date === localKey(new Date(g.date)));
+function scoutsLine(now) {
+  const today = localKey(now);
+  const left = CONFIG.scouts.filter(s => s.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+  if (!left.length) return "";
+  const md = s => { const [, m, d] = s.date.split("-"); return `${+m}/${+d}`; };
+  const [first, ...rest] = left;
+  const fd = new Date(first.date + "T12:00");
+  const game = (games?.events || []).find(g => localKey(new Date(g.date)) === first.date);
+  const where = game ? (game.home ? "vs " : game.neutral ? "vs " : "at ") : "";
+  const days = Math.round((sod(fd) - sod(now)) / 864e5);
+  const when = days === 0 ? "today" : days === 1 ? "tomorrow" : `${days} days`;
+  return `<div class="scouts num"><span class="k">My scouts</span>
+    <span class="nx">${where}${esc(first.team)} ${md(first)}<em>${when}</em></span>
+    ${rest.map(s => `<span>${esc(s.short)} ${md(s)}</span>`).join("")}</div>`;
+}
 const haLabel = g => g.home ? "vs" : g.neutral ? "vs" : "at";
 const oppName = g => `${g.oppRank ? `<span class="rk">#${g.oppRank}</span>` : ""}${esc(g.opp)}`;
 function renderGame() {
@@ -357,7 +387,7 @@ function renderGame() {
   } else if (next) {
     const d = new Date(next.date);
     const where = next.home ? next.venue : [next.venue, next.city].filter(Boolean).join(", ");
-    h += `<div class="game-head"><span class="label">${rec.played ? "Next game" : "Season opener"}</span><span class="game-when num">${gameDay(d, now)}</span></div>
+    h += `<div class="game-head"><span class="label">${rec.played ? "Next game" : "Season opener"}${scoutFor(next) ? '<span class="scout-tag">My scout</span>' : ""}</span><span class="game-when num">${gameDay(d, now)}</span></div>
       <div class="game-opp"><span class="ha">${haLabel(next)}</span>${oppName(next)}</div>
       <div class="game-sub num"><span>${gameWhen(next)}</span>${where ? `<span>${esc(where)}</span>` : ""}${next.tv.length ? `<span>${esc(next.tv.join(" / "))}</span>` : ""}</div>`;
   } else {
@@ -375,6 +405,7 @@ function renderGame() {
   } else {
     h += `<div class="record num"><span>${esc(games.season || "")} season · 0-0</span>${gamesSample ? '<span class="warn">sample</span>' : ""}</div>`;
   }
+  h += scoutsLine(now);
   $("game").innerHTML = h;
 }
 
